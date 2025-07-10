@@ -55,10 +55,15 @@ jobs:
         run: |
           mkdir -p env
           if [ ! -f env/dev.json ]; then
-            echo '{}' > env/dev.json
+            echo '{"BASE_URL": "", "API_KEY": ""}' > env/dev.json
+          fi
+          if [ ! -f env/prod.json ]; then
+            echo '{"BASE_URL": "", "API_KEY": ""}' > env/prod.json
           fi
           echo "Contents of env/dev.json:"
           cat env/dev.json
+          echo "Contents of env/prod.json:"
+          cat env/prod.json
 
       - name: Clean before build
         run: |
@@ -105,28 +110,32 @@ jobs:
       - name: Build iOS (no codesign)
         run: |
           echo "Starting iOS build..."
+          echo "Available schemes: dev, prod, ShareExtension"
           
-          # Try building without flavor first
+          # Build with prod flavor (most stable for release)
           flutter build ios \
             --release \
             --no-codesign \
+            --flavor prod \
             --dart-define=IPHONEOS_DEPLOYMENT_TARGET=16.1 \
             -t lib/main.dart \
             --verbose || {
             
-            echo "Build failed, trying without custom env file..."
+            echo "Prod build failed, trying dev flavor..."
             
-            # Try without env file if it fails
+            # Try dev flavor if prod fails
             flutter build ios \
               --release \
               --no-codesign \
+              --flavor dev \
+              --dart-define-from-file env/dev.json \
               --dart-define=IPHONEOS_DEPLOYMENT_TARGET=16.1 \
               -t lib/main.dart \
               --verbose || {
               
-              echo "Build failed again, checking for specific errors..."
-              echo "Checking iOS project structure..."
-              ls -la ios/
+              echo "Both builds failed, checking project structure..."
+              echo "Available Xcode schemes:"
+              xcodebuild -list -project ios/Runner.xcodeproj
               
               echo "Checking for errors in iOS logs..."
               if [ -d "ios/build" ]; then
@@ -159,9 +168,10 @@ jobs:
         run: |
           echo "✅ iOS app built successfully!"
           echo "📱 Target iOS version: 16.1+"
-          echo "📦 IPA file: boorusama-ios16.1-dev.ipa"
+          echo "📦 IPA files created:"
+          ls -la boorusama-ios16.1-*.ipa
           echo "💾 Compatible with iOS 16.1.1 and newer versions"
-          ls -la boorusama-ios16.1-dev.ipa
+          echo "🎯 Flavor: $(ls boorusama-ios16.1-*.ipa | grep -o 'prod\|dev' || echo 'prod')"
 
       - name: Debug build environment
         if: failure()

@@ -1,6 +1,10 @@
-name: "build ipa dev"
+name: "Build iOS App"
 
 on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
   workflow_dispatch:
 
 concurrency:
@@ -9,7 +13,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
@@ -18,45 +22,64 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.27.1
-          
+          flutter-version: '3.27.1'
+          cache: true
+
       - name: Install CocoaPods
         run: |
-          sudo gem install securerandom -v 0.3.2
-          sudo gem install drb -v 2.0.6 
-          sudo gem install activesupport -v 6.1.7.10
-          sudo gem install zeitwerk -v 2.6.18 
-          sudo gem install activesupport -v 6.1.7.10
-          sudo gem install concurrent-ruby -v 1.3.4
           sudo gem install cocoapods
+          pod --version
 
-      - name: Install XCode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest
-
-      - name: Install iOS SDK
+      - name: Verify Xcode installation
         run: |
-          xcodebuild -downloadPlatform iOS
+          xcode-select -p
+          xcrun --show-sdk-version
+
+      - name: Flutter doctor
+        run: flutter doctor -v
 
       - name: Install dependencies
         run: |
           flutter pub get
           flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: Build
+      - name: Create env file (if missing)
         run: |
-          flutter build ios --release --no-codesign --flavor dev --dart-define-from-file env/dev.json -t lib/main.dart -v
+          mkdir -p env
+          if [ ! -f env/dev.json ]; then
+            echo '{}' > env/dev.json
+          fi
 
-      - name: Package
+      - name: Build iOS (no codesign)
         run: |
-          cd build/ios
-          mv iphoneos Payload
-          zip -ro boorusama-dev.ipa Payload
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --flavor dev \
+            --dart-define-from-file env/dev.json \
+            -t lib/main.dart \
+            --verbose
 
-      - name: Upload Artifact
-        id: boorusama-ios-latest-upload
+      - name: Create IPA
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -r Runner.app Payload/
+          zip -r ../../../boorusama-dev.ipa Payload/
+
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
+          name: boorusama-ios-dev
+          path: boorusama-dev.ipa
+          retention-days: 30
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
           path: |
-            ${{ github.workspace }}/build/ios/boorusama-dev.ipa
+            flutter_build.log
+            ios/build/
+          retention-days: 7

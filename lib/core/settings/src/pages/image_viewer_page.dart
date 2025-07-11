@@ -41,7 +41,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
             SettingsHeader(label: context.t.settings.general),
             SettingsTile(
               title: Text(
-                context.t.settings.image_details.ui_overlay.ui_overlay,
+                context.t.settings.image_details.ui_overlay.show,
               ),
               selectedOption: settings.postDetailsOverlayInitialState,
               items: PostDetailsOverlayInitialState.values,
